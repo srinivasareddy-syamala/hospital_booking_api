@@ -1,59 +1,92 @@
 from fastapi import FastAPI
-import pymysql
+import psycopg2
+import os
 
 app = FastAPI()
 
-# MySQL connection
-conn = pymysql.connect(
-    host="localhost",
-    user="root",
-    password="root",
-    database="hospital_db",
-    cursorclass=pymysql.cursors.DictCursor
-)
+# Railway automatically provides DATABASE_URL
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Home route
-@app.get("/")
-def home():
-    return {"message": "Hospital Appointment API running"}
+def get_connection():
+    conn = psycopg2.connect(DATABASE_URL)
+    return conn
 
-# Book appointment
-@app.post("/book_appointment")
-def book_appointment(name: str, phone: str, date: str, time: str):
 
+# ===============================
+# Create Table (runs automatically)
+# ===============================
+@app.on_event("startup")
+def create_table():
+
+    conn = get_connection()
     cur = conn.cursor()
 
-    # check if slot already booked
-    check_query = """
-    SELECT * FROM appointments 
-    WHERE appointment_date=%s AND appointment_time=%s
-    """
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS appointments (
+        id SERIAL PRIMARY KEY,
+        patient_name TEXT,
+        doctor_name TEXT,
+        appointment_date DATE,
+        appointment_time TEXT
+    );
+    """)
 
-    cur.execute(check_query, (date, time))
-    existing = cur.fetchone()
+    conn.commit()
+    cur.close()
+    conn.close()
 
-    if existing:
-        return {"message": "This time slot is already booked"}
 
-    insert_query = """
-    INSERT INTO appointments
-    (name, phone, appointment_date, appointment_time)
-    VALUES (%s,%s,%s,%s)
-    """
+# ===============================
+# Check availability
+# ===============================
+@app.get("/check")
+def check_availability(doctor: str, date: str, time: str):
 
-    cur.execute(insert_query, (name, phone, date, time))
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        SELECT * FROM appointments
+        WHERE doctor_name=%s
+        AND appointment_date=%s
+        AND appointment_time=%s
+        """,
+        (doctor, date, time)
+    )
+
+    result = cur.fetchone()
+
+    cur.close()
+    conn.close()
+
+    if result:
+        return {"available": False}
+
+    return {"available": True}
+
+
+# ===============================
+# Book appointment
+# ===============================
+@app.post("/book")
+def book_appointment(name: str, doctor: str, date: str, time: str):
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        INSERT INTO appointments
+        (patient_name, doctor_name, appointment_date, appointment_time)
+        VALUES (%s,%s,%s,%s)
+        """,
+        (name, doctor, date, time)
+    )
+
     conn.commit()
 
+    cur.close()
+    conn.close()
+
     return {"message": "Appointment booked successfully"}
-
-# View all appointments
-@app.get("/appointments")
-def view_appointments():
-
-    cur = conn.cursor()
-
-    cur.execute("SELECT * FROM appointments")
-
-    data = cur.fetchall()
-
-    return data
