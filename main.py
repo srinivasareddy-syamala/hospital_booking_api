@@ -6,6 +6,16 @@ app = FastAPI()
 
 # Railway automatically provides DATABASE_URL
 DATABASE_URL = os.getenv("mysql://root:UwOxBlybefyaXrLAlmudeSVXPqXDlaOM@yamanote.proxy.rlwy.net:25439/railway")
+import os
+import mysql.connector
+
+conn = mysql.connector.connect(
+    host=os.getenv("MYSQLHOST"),
+    user=os.getenv("MYSQLUSER"),
+    password=os.getenv("MYSQLPASSWORD"),
+    database=os.getenv("MYSQLDATABASE"),
+    port=os.getenv("MYSQLPORT")
+)
 
 def get_connection():
     conn = psycopg2.connect(DATABASE_URL)
@@ -90,4 +100,5 @@ def book_appointment(name: str, doctor: str, date: str, time: str):
     conn.close()
 
     return {"message": "Appointment booked successfully"}
+
 
